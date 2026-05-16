@@ -1,0 +1,11 @@
+# Build artifacts
+*.zip
+*.img
+
+# Log files
+*.log
+
+# IDE folders
+.idea/
+.vscode/
+*.iml
