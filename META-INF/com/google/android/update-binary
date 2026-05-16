@@ -16,7 +16,7 @@ ANCHOR_DIR="/data/adb/recovery-anchor"
 
 ui_print ""
 ui_print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-ui_print "  RecoveryAnchor v1.0.0"
+ui_print "  RecoveryAnchor v1.1.0"
 ui_print "  by kha0sk1ng"
 ui_print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 ui_print ""
