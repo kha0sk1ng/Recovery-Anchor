@@ -44,12 +44,19 @@ log_raw "  RecoveryAnchor ${VERSION}  |  $(date '+%Y-%m-%d %H:%M:%S')"
 log_raw "  ${REPO}"
 log_raw "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# ── Guard: disabled via config ────────────────────────────────────────────────
+# ── Guard: disabled / dry-run via config ─────────────────────────────────────
+# ENABLED=true  -> normal flash mode
+# ENABLED=check -> dry-run: compare hashes and log intent, skip actual dd
+# ENABLED=false -> disabled, exit immediately
 
-if [ "$ENABLED" != "true" ]; then
-    log INFO "Disabled via config — exiting."
+if [ "$ENABLED" = "false" ]; then
+    log INFO "Disabled via config (ENABLED=false) — exiting."
     log_raw ""
     exit 0
+fi
+
+if [ "$ENABLED" = "check" ]; then
+    log INFO "Mode: DRY-RUN (ENABLED=check) — no partition writes will occur."
 fi
 
 # ── Wait for boot ─────────────────────────────────────────────────────────────
@@ -118,6 +125,13 @@ flash_slot() {
     fi
 
     log FLASH "recovery${slot} — mismatch (partition: ${part_hash:0:8}… / image: ${img_hash:0:8}…)"
+
+    # Dry-run: log intent and skip the actual write
+    if [ "$ENABLED" = "check" ]; then
+        log DRYRUN "recovery${slot} — would flash ${img_mb} MB (dry-run, no write performed)"
+        return 0
+    fi
+
     log FLASH "recovery${slot} — flashing ${img_mb} MB..."
 
     local t_start t_end elapsed
