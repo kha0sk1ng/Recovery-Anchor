@@ -191,12 +191,27 @@ flash_slot() {
 }
 
 # ── Run ───────────────────────────────────────────────────────────────────────
+# Detect whether this is an A/B device by checking for slot-suffixed partitions.
+# Fall back to the legacy "recovery" partition on non-A/B (single-slot) devices.
 
-if [ "$FLASH_BOTH_SLOTS" = "true" ]; then
-    flash_slot "_a"
-    flash_slot "_b"
+AB_DEVICE=false
+if [ -b "/dev/block/by-name/recovery_a" ] || [ -b "/dev/block/by-name/recovery_b" ]; then
+    AB_DEVICE=true
+fi
+
+if [ "$AB_DEVICE" = "true" ]; then
+    if [ "$FLASH_BOTH_SLOTS" = "true" ]; then
+        log INFO "A/B device — flashing both slots"
+        flash_slot "_a"
+        flash_slot "_b"
+    else
+        log INFO "A/B device — flashing active slot only (${active_slot})"
+        flash_slot "$active_slot"
+    fi
 else
-    flash_slot "$active_slot"
+    # Non-A/B (legacy single-slot) device: ignore FLASH_BOTH_SLOTS, use "recovery"
+    log INFO "Non-A/B device — flashing legacy recovery partition"
+    flash_slot ""
 fi
 
 log INFO "Done."
