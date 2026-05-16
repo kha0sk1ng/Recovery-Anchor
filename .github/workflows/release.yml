@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Build zip artifact
+        run: |
+          OUTPUT="RecoveryAnchor.zip"
+          rm -f "$OUTPUT"
+          zip -r "$OUTPUT" \
+            module.prop \
+            service.sh \
+            customize.sh \
+            META-INF \
+            LICENSE \
+            --exclude "*.git*" \
+            --exclude "build.sh" \
+            --exclude "*.zip" \
+            --exclude "*.img" \
+            --exclude "*.log"
+          echo "Built $OUTPUT ($(du -sh "$OUTPUT" | cut -f1))"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
+          name: "RecoveryAnchor ${{ steps.version.outputs.VERSION }}"
+          body_path: CHANGELOG.md
+          files: RecoveryAnchor.zip
