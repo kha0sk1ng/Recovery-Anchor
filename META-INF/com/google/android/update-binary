@@ -1,0 +1,53 @@
+#!/sbin/sh
+# RecoveryAnchor - update-binary
+# Installer for OrangeFox / TWRP.
+
+OUTFD="$2"
+ZIPFILE="$3"
+
+ui_print() {
+    echo "ui_print $1" >> /proc/self/fd/"$OUTFD"
+    echo "ui_print"    >> /proc/self/fd/"$OUTFD"
+}
+
+MODID="recovery-anchor"
+MODPATH="/data/adb/modules/$MODID"
+ANCHOR_DIR="/data/adb/recovery-anchor"
+
+ui_print ""
+ui_print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+ui_print "  RecoveryAnchor v1.0.0"
+ui_print "  by kha0sk1ng"
+ui_print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+ui_print ""
+
+mkdir -p "$MODPATH"
+mkdir -p "$ANCHOR_DIR"
+
+# Extract only the files the module needs at runtime
+unzip -o "$ZIPFILE" 'module.prop' -d "$MODPATH" >/dev/null 2>&1
+unzip -o "$ZIPFILE" 'service.sh'  -d "$MODPATH" >/dev/null 2>&1
+
+chmod 755 "$MODPATH/service.sh"
+
+# Write default config only if absent
+if [ ! -f "$ANCHOR_DIR/config" ]; then
+    cat > "$ANCHOR_DIR/config" << 'CONF'
+RECOVERY_IMG=/data/adb/recovery-anchor/recovery.img
+FLASH_BOTH_SLOTS=true
+ENABLED=true
+CONF
+    ui_print "  [+] Default config written."
+else
+    ui_print "  [*] Existing config kept."
+fi
+
+if [ -f "$ANCHOR_DIR/recovery.img" ]; then
+    ui_print "  [+] Recovery image found — ready."
+else
+    ui_print "  [!] Copy your recovery.img to:"
+    ui_print "        $ANCHOR_DIR/recovery.img"
+fi
+
+ui_print "  [+] Reboot to activate."
+ui_print ""
