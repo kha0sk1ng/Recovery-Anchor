@@ -132,6 +132,48 @@ flash_slot() {
         return 0
     fi
 
+    # ── Backup current partition before overwriting ────────────────────────────
+    local ts
+    ts=$(date '+%Y%m%d_%H%M%S')
+    # Slot suffix (_a, _b) or empty string for non-A/B; strip leading underscore for filename
+    local slot_label
+    slot_label=$(printf '%s' "$slot" | sed 's/^_//')
+    [ -z "$slot_label" ] && slot_label="noab"
+    local backup_file="$ANCHOR_DIR/recovery_backup_${slot_label}_${ts}.img"
+
+    log BACKUP "recovery${slot} — creating backup: $backup_file"
+    if ! dd if="$part" of="$backup_file" bs=4096 2>/dev/null; then
+        log ERROR "recovery${slot} — backup dd failed; aborting flash to prevent data loss"
+        rm -f "$backup_file"
+        return 1
+    fi
+    sync
+
+    # Integrity check: compare sha256 of partition source vs backup file
+    local src_sha bak_sha
+    src_sha=$(dd if="$part" bs=4096 2>/dev/null | sha256sum | cut -d' ' -f1)
+    bak_sha=$(sha256sum "$backup_file" 2>/dev/null | cut -d' ' -f1)
+
+    if [ "$src_sha" != "$bak_sha" ]; then
+        log ERROR "recovery${slot} — backup integrity check FAILED (src: ${src_sha:0:16}… / bak: ${bak_sha:0:16}…)"
+        log ERROR "recovery${slot} — corrupted backup deleted; aborting flash"
+        rm -f "$backup_file"
+        return 1
+    fi
+
+    log BACKUP "recovery${slot} — backup verified OK (sha256: ${bak_sha:0:16}…)"
+
+    # Keep only the 1 most recent backup per slot; delete older ones
+    local old_backups
+    old_backups=$(ls -t "$ANCHOR_DIR/recovery_backup_${slot_label}_"*.img 2>/dev/null | tail -n +2)
+    if [ -n "$old_backups" ]; then
+        printf '%s\n' "$old_backups" | while IFS= read -r f; do
+            log BACKUP "recovery${slot} — removing old backup: $f"
+            rm -f "$f"
+        done
+    fi
+
+    # ── Flash ─────────────────────────────────────────────────────────────────
     log FLASH "recovery${slot} — flashing ${img_mb} MB..."
 
     local t_start t_end elapsed
