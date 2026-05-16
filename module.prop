@@ -4,3 +4,4 @@ version=v1.0.0
 versionCode=1
 author=kha0sk1ng
 description=Reflashes custom recovery to both A/B slots on boot to survive OTA updates. Place recovery.img at /data/adb/recovery-anchor/recovery.img
+support=https://github.com/kha0sk1ng/Recovery-Anchor/

@@ -1,5 +1,6 @@
 #!/system/bin/sh
-# RecoveryAnchor - service.sh
+# RecoveryAnchor v1.0.0
+# https://github.com/kha0sk1ng/Recovery-Anchor/
 # Runs as root on every boot via KernelSU.
 
 ANCHOR_DIR="/data/adb/recovery-anchor"
@@ -7,58 +8,103 @@ CONFIG="$ANCHOR_DIR/config"
 LOG="$ANCHOR_DIR/anchor.log"
 MAX_LOG_BYTES=102400  # 100 KB
 
+VERSION="v1.0.0"
+REPO="https://github.com/kha0sk1ng/Recovery-Anchor/"
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG"; }
+log() {
+    local level="$1"
+    shift
+    printf '[%s] [%-5s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$level" "$*" >> "$LOG"
+}
 
-# Rotate log when oversized
+log_raw() {
+    printf '%s\n' "$*" >> "$LOG"
+}
+
+# Rotate when oversized: keep last run in .old
 if [ -f "$LOG" ]; then
     log_size=$(wc -c < "$LOG" 2>/dev/null | tr -d ' ')
     [ "${log_size:-0}" -gt "$MAX_LOG_BYTES" ] && mv "$LOG" "${LOG}.old"
 fi
 
 # ── Load config ───────────────────────────────────────────────────────────────
-# Defaults
 RECOVERY_IMG="$ANCHOR_DIR/recovery.img"
 FLASH_BOTH_SLOTS="true"
 ENABLED="true"
 
 [ -f "$CONFIG" ] && . "$CONFIG"
 
-# ── Guards ────────────────────────────────────────────────────────────────────
+# ── Header ────────────────────────────────────────────────────────────────────
+
+log_raw ""
+log_raw "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+log_raw "  RecoveryAnchor ${VERSION}  |  $(date '+%Y-%m-%d %H:%M:%S')"
+log_raw "  ${REPO}"
+log_raw "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# ── Guard: disabled via config ────────────────────────────────────────────────
 
 if [ "$ENABLED" != "true" ]; then
-    log "[SKIP] Disabled via config."
+    log INFO "Disabled via config — exiting."
+    log_raw ""
     exit 0
-fi
-
-if [ ! -f "$RECOVERY_IMG" ]; then
-    log "[ERROR] Recovery image not found: $RECOVERY_IMG"
-    exit 1
 fi
 
 # ── Wait for boot ─────────────────────────────────────────────────────────────
 
+log INFO "Waiting for sys.boot_completed..."
 until [ "$(getprop sys.boot_completed)" = "1" ]; do
     sleep 5
 done
-sleep 15  # Extra margin for storage to fully settle
+sleep 15
 
-log "[START] Boot run — mode: $([ "$FLASH_BOTH_SLOTS" = "true" ] && echo 'both slots' || echo 'active slot only')"
+# ── Device info ───────────────────────────────────────────────────────────────
 
-# ── Flash ─────────────────────────────────────────────────────────────────────
+device_model="$(getprop ro.product.model 2>/dev/null)"
+device_codename="$(getprop ro.product.device 2>/dev/null)"
+active_slot="$(getprop ro.boot.slot_suffix)"
+android_ver="$(getprop ro.build.version.release 2>/dev/null)"
 
-# Compare first 4 MB (1024 × 4096 B) of image vs partition.
-# Fast enough, reliable enough: any stock vs custom recovery will differ here.
-CHECK_BLOCKS=1024
+log INFO "Device  : ${device_model} (${device_codename})"
+log INFO "Android : ${android_ver}"
+log INFO "Slot    : ${active_slot}"
+
+# ── Guard: image exists ───────────────────────────────────────────────────────
+
+if [ ! -f "$RECOVERY_IMG" ]; then
+    log ERROR "Recovery image not found: $RECOVERY_IMG"
+    log ERROR "Copy your .img there and reboot."
+    log_raw ""
+    exit 1
+fi
+
+# Log image size
+img_bytes=$(wc -c < "$RECOVERY_IMG" 2>/dev/null | tr -d ' ')
+img_mb=$(( ${img_bytes:-0} / 1048576 ))
+log INFO "Image   : $RECOVERY_IMG (${img_mb} MB)"
+
+# ── Flash mode ────────────────────────────────────────────────────────────────
+
+if [ "$FLASH_BOTH_SLOTS" = "true" ]; then
+    log INFO "Mode    : both slots"
+else
+    log INFO "Mode    : active slot only (${active_slot})"
+fi
+
+# ── Flash function ────────────────────────────────────────────────────────────
+# Compares first 4 MB of image vs partition (fast + reliable).
+# Stock and custom recovery always differ in the first pages (header, ramdisk).
+
+CHECK_BLOCKS=1024  # 1024 × 4096 B = 4 MB
 
 flash_slot() {
     local slot="$1"
     local part="/dev/block/by-name/recovery${slot}"
 
-    # Skip gracefully on non-A/B devices or missing partitions
     if [ ! -b "$part" ]; then
-        log "  [SKIP] recovery${slot} — partition not found"
+        log SKIP "recovery${slot} — partition not found"
         return 1
     fi
 
@@ -67,21 +113,28 @@ flash_slot() {
     part_hash=$(dd if="$part"         bs=4096 count=$CHECK_BLOCKS 2>/dev/null | md5sum | cut -d' ' -f1)
 
     if [ "$img_hash" = "$part_hash" ]; then
-        log "  [OK] recovery${slot} matches image — skip"
+        log OK   "recovery${slot} — matches image, no flash needed"
         return 0
     fi
 
-    log "  [FLASH] recovery${slot} mismatch detected, flashing..."
+    log FLASH "recovery${slot} — mismatch (partition: ${part_hash:0:8}… / image: ${img_hash:0:8}…)"
+    log FLASH "recovery${slot} — flashing ${img_mb} MB..."
+
+    local t_start t_end elapsed
+    t_start=$(date +%s)
+
     if dd if="$RECOVERY_IMG" of="$part" bs=4096 2>/dev/null; then
         sync
-        log "  [OK] recovery${slot} flashed"
+        t_end=$(date +%s)
+        elapsed=$(( t_end - t_start ))
+        log OK   "recovery${slot} — done in ${elapsed}s"
     else
-        log "  [ERROR] recovery${slot} flash failed"
+        log ERROR "recovery${slot} — dd failed"
         return 1
     fi
 }
 
-active_slot="$(getprop ro.boot.slot_suffix)"
+# ── Run ───────────────────────────────────────────────────────────────────────
 
 if [ "$FLASH_BOTH_SLOTS" = "true" ]; then
     flash_slot "_a"
@@ -90,4 +143,5 @@ else
     flash_slot "$active_slot"
 fi
 
-log "[DONE]"
+log INFO "Done."
+log_raw ""
