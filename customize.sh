@@ -1,5 +1,5 @@
 #!/sbin/sh
-# RecoveryAnchor v1.0.0 — customize.sh
+# RecoveryAnchor v1.1.0 — customize.sh
 # https://github.com/kha0sk1ng/Recovery-Anchor/
 # Runs during installation via KernelSU Manager.
 
@@ -14,7 +14,7 @@ DEFAULT_IMG="$ANCHOR_DIR/recovery.img"
 
 ui_print ""
 ui_print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-ui_print "  RecoveryAnchor v1.0.0"
+ui_print "  RecoveryAnchor v1.1.0"
 ui_print "  by kha0sk1ng"
 ui_print "  github.com/kha0sk1ng/Recovery-Anchor"
 ui_print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

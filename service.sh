@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# RecoveryAnchor v1.0.0
+# RecoveryAnchor v1.1.0
 # https://github.com/kha0sk1ng/Recovery-Anchor/
 # Runs as root on every boot via KernelSU.
 
@@ -8,7 +8,7 @@ CONFIG="$ANCHOR_DIR/config"
 LOG="$ANCHOR_DIR/anchor.log"
 MAX_LOG_BYTES=102400  # 100 KB
 
-VERSION="v1.0.0"
+VERSION="v1.1.0"
 REPO="https://github.com/kha0sk1ng/Recovery-Anchor/"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
