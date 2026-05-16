@@ -116,8 +116,8 @@ flash_slot() {
     fi
 
     local img_hash part_hash
-    img_hash=$(dd if="$RECOVERY_IMG" bs=4096 count=$CHECK_BLOCKS 2>/dev/null | md5sum | cut -d' ' -f1)
-    part_hash=$(dd if="$part"         bs=4096 count=$CHECK_BLOCKS 2>/dev/null | md5sum | cut -d' ' -f1)
+    img_hash=$(dd if="$RECOVERY_IMG" bs=4096 count=$CHECK_BLOCKS 2>/dev/null | sha256sum | cut -d' ' -f1)
+    part_hash=$(dd if="$part"         bs=4096 count=$CHECK_BLOCKS 2>/dev/null | sha256sum | cut -d' ' -f1)
 
     if [ "$img_hash" = "$part_hash" ]; then
         log OK   "recovery${slot} — matches image, no flash needed"
