@@ -188,8 +188,7 @@ flash_slot() {
     local t_start t_end elapsed
     t_start=$(date +%s)
 
-    if dd if="$RECOVERY_IMG" of="$part" bs=4096 2>/dev/null; then
-        sync
+    if dd if="$RECOVERY_IMG" of="$part" bs=4096 conv=fsync 2>/dev/null; then
         t_end=$(date +%s)
         elapsed=$(( t_end - t_start ))
         log OK   "recovery${slot} — done in ${elapsed}s"
