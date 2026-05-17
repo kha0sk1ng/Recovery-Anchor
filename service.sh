@@ -34,7 +34,16 @@ RECOVERY_IMG="$ANCHOR_DIR/recovery.img"
 FLASH_BOTH_SLOTS="true"
 ENABLED="true"
 
-[ -f "$CONFIG" ] && . "$CONFIG"
+if [ -f "$CONFIG" ]; then
+    cfg_val=$(grep -E '^[[:space:]]*RECOVERY_IMG=' "$CONFIG" | tail -1 | cut -d= -f2-)
+    [ -n "$cfg_val" ] && RECOVERY_IMG="$cfg_val"
+
+    cfg_val=$(grep -E '^[[:space:]]*FLASH_BOTH_SLOTS=' "$CONFIG" | tail -1 | cut -d= -f2-)
+    [ -n "$cfg_val" ] && FLASH_BOTH_SLOTS="$cfg_val"
+
+    cfg_val=$(grep -E '^[[:space:]]*ENABLED=' "$CONFIG" | tail -1 | cut -d= -f2-)
+    [ -n "$cfg_val" ] && ENABLED="$cfg_val"
+fi
 
 # ── Header ────────────────────────────────────────────────────────────────────
 
