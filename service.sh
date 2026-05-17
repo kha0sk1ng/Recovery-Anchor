@@ -157,7 +157,7 @@ flash_slot() {
         return 1
     fi
     sync
-
+    chmod 600 "$backup_file"
     # Integrity check: compare sha256 of partition source vs backup file
     local src_sha bak_sha
     src_sha=$(dd if="$part" bs=4096 2>/dev/null | sha256sum | cut -d' ' -f1)
