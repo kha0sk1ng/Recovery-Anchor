@@ -26,7 +26,11 @@ log_raw() {
 # Rotate when oversized: keep last run in .old
 if [ -f "$LOG" ]; then
     log_size=$(wc -c < "$LOG" 2>/dev/null | tr -d ' ')
-    [ "${log_size:-0}" -gt "$MAX_LOG_BYTES" ] && mv "$LOG" "${LOG}.old"
+    if [ "${log_size:-0}" -gt "$MAX_LOG_BYTES" ]; then
+        mv "$LOG" "${LOG}.old"
+        touch "$LOG"
+        chmod 600 "$LOG"
+    fi
 fi
 
 # ── Load config ───────────────────────────────────────────────────────────────
