@@ -3,5 +3,5 @@ name=RecoveryAnchor
 version=v1.3.0
 versionCode=4
 author=kha0sk1ng
-description=Reflashes custom recovery to both A/B slots on boot to survive OTA updates. Place recovery.img at /data/adb/recovery-anchor/recovery.img
+description=Auto-reflashes TWRP/OrangeFox after OTA on A/B devices. Place recovery.img at /data/adb/recovery-anchor/recovery.img
 support=https://github.com/kha0sk1ng/Recovery-Anchor/
