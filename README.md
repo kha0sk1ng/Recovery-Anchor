@@ -2,111 +2,59 @@
 
 # ⚓ RecoveryAnchor
 
-**Automatically reflashes your custom recovery after every OTA update.**
+**Automatically reflashes your custom recovery after every OTA update — on A/B devices.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![KernelSU](https://img.shields.io/badge/KernelSU-supported-green?logo=linux)](https://kernelsu.org)
 [![KernelSU Next](https://img.shields.io/badge/KernelSU_Next-supported-brightgreen?logo=linux)](https://github.com/rifsxd/KernelSU-Next)
 [![Magisk](https://img.shields.io/badge/Magisk-supported-orange)](https://github.com/topjohnwu/Magisk)
 [![Shell](https://img.shields.io/badge/Shell-Bash-4EAA25?logo=gnubash&logoColor=white)](service.sh)
-[![Version](https://img.shields.io/badge/version-v1.1.0-blueviolet)](module.prop)
+[![Version](https://img.shields.io/badge/version-v1.2.4-blueviolet)](module.prop)
 
 </div>
 
 ---
 
-## 🚀 About
+## 📋 Table of Contents
 
-Every Android OTA update rewrites the boot chain — and with it, your custom recovery partition. After a system update, **TWRP**, **OrangeFox**, or any other third-party recovery gets silently replaced by the stock image, locking you out of root tools until you manually reflash.
-
-**RecoveryAnchor** solves this permanently. It runs as a root service on every boot, compares the recovery partition against your stored image, and reflashes only when a mismatch is detected — all before you unlock the screen.
-
-> **No manual intervention required.** Once installed and configured, the module is fully autonomous.
+- [About](#-about)
+- [Quick Start](#-quick-start)
+- [Features](#-features)
+- [Compatibility](#️-compatibility)
+- [Installation](#-installation)
+- [Usage After OTA Update](#-usage-after-ota-update)
+- [Configuration](#️-configuration)
+- [Logs & Troubleshooting](#-logs--troubleshooting)
+- [How It Works](#️-how-it-works-under-the-hood)
+- [Building from Source](#-building-from-source)
+- [Disclaimer](#️-disclaimer)
+- [License](#license)
 
 ---
 
-## ⚙️ How It Works (Under the Hood)
+## 🔍 About
 
-The core logic lives in **`service.sh`**, which is executed as root on every boot by the KernelSU / Magisk service framework.
+Every Android OTA update rewrites the inactive boot slot — and with it, your custom recovery partition. After a system update, **TWRP**, **OrangeFox**, or any other third-party recovery gets silently replaced by the stock image.
 
-### 1. Boot gate
+**RecoveryAnchor** solves this automatically. It runs as a root service on every boot, compares the recovery partition against your stored image using SHA-256, and reflashes only when a mismatch is detected — before you even unlock the screen.
 
-The script polls `sys.boot_completed` before doing anything, then waits an additional 15 seconds to ensure block devices are fully initialised:
+> **This module is designed for A/B (slot) devices only.**
+> A-only devices have a different partition layout and OTA mechanism — this module is not compatible with them.
 
-```sh
-until [ "$(getprop sys.boot_completed)" = "1" ]; do
-    sleep 5
-done
-sleep 15
-```
+---
 
-### 2. A/B slot detection
+## ⚡ Quick Start
 
-The script auto-detects the device topology by probing block device nodes directly — no reliance on build props that can be spoofed or absent:
+1. Download `RecoveryAnchor.zip` from [Releases](https://github.com/kha0sk1ng/Recovery-Anchor/releases).
+2. Install via **KernelSU / Magisk → Modules → Install from storage**.
+3. Push your recovery image:
+   ```bash
+   adb push recovery.img /data/adb/recovery-anchor/recovery.img
+   ```
+4. Reboot. The module is now active.
 
-```sh
-# Check for slot-suffixed partitions to determine A/B layout
-if [ -b "/dev/block/by-name/recovery_a" ] || [ -b "/dev/block/by-name/recovery_b" ]; then
-    AB_DEVICE=true
-fi
-```
-
-- **A/B devices** — flashes `recovery_a` and/or `recovery_b` depending on `FLASH_BOTH_SLOTS`.
-- **Non-A/B (legacy) devices** — automatically ignores `FLASH_BOTH_SLOTS` and targets the single `recovery` partition.
-
-### 3. Hash-based change detection
-
-Rather than flashing unconditionally, the script computes a **SHA-256** digest over the first **4 MB** (1024 × 4096-byte blocks) of both the stored image and the live partition, then compares them:
-
-```sh
-CHECK_BLOCKS=1024  # 1024 × 4096 B = 4 MB
-
-# Read first 4 MB from the image file
-img_hash=$(dd if="$RECOVERY_IMG" bs=4096 count=$CHECK_BLOCKS 2>/dev/null | sha256sum | cut -d' ' -f1)
-
-# Read first 4 MB from the block device
-part_hash=$(dd if="$part" bs=4096 count=$CHECK_BLOCKS 2>/dev/null | sha256sum | cut -d' ' -f1)
-```
-
-Checking 4 MB is both fast and reliable — the Android boot image header, kernel, and ramdisk header all reside in the first pages, so any meaningful difference between stock and custom recovery is detected immediately.
-
-If the hashes match, the slot is skipped entirely: **zero writes, zero wear on the partition**.
-
-### 4. Pre-flash backup with integrity verification
-
-If a mismatch is found, the existing partition is backed up **before** any write occurs. The backup is then verified with a second SHA-256 pass. If the hashes disagree (I/O error, unstable block device), the corrupted backup is deleted and the flash is **aborted** to prevent data loss:
-
-```sh
-# Dump the current recovery partition to a timestamped file
-dd if="$part" of="$backup_file" bs=4096 2>/dev/null
-sync
-
-# Cross-verify: re-read partition and compare against the written backup
-src_sha=$(dd if="$part" bs=4096 2>/dev/null | sha256sum | cut -d' ' -f1)
-bak_sha=$(sha256sum "$backup_file" 2>/dev/null | cut -d' ' -f1)
-
-if [ "$src_sha" != "$bak_sha" ]; then
-    rm -f "$backup_file"
-    return 1  # Abort — do not flash over an unverified backup
-fi
-```
-
-Only the **1 most recent backup per slot** is retained; older files are removed automatically.
-
-### 5. Flash
-
-With a verified backup in place, the image is written to the partition using `dd` with a 4096-byte block size. Flash duration is measured and logged:
-
-```sh
-t_start=$(date +%s)
-dd if="$RECOVERY_IMG" of="$part" bs=4096 2>/dev/null
-sync
-elapsed=$(( $(date +%s) - t_start ))
-```
-
-### 6. Log rotation
-
-The log file is capped at **100 KB**. On each run, if **`anchor.log`** exceeds that threshold, it is rotated to **`anchor.log.old`** before new entries are appended — keeping storage impact negligible.
+> **Before rebooting after an OTA update — read the [Usage After OTA Update](#-usage-after-ota-update) section first.**
+> Skipping that step will cause you to lose root access on the new slot.
 
 ---
 
@@ -114,33 +62,33 @@ The log file is capped at **100 KB**. On each run, if **`anchor.log`** exceeds t
 
 | Feature | Details |
 |---|---|
-| **Hash-based change detection** | SHA-256 over first 4 MB; skips flash when partition already matches |
-| **Pre-flash backup** | Full `dd` dump of the current partition before any write |
-| **Backup integrity check** | Cross-verifies backup with SHA-256; aborts if check fails |
-| **Dry-run mode** | `ENABLED=check` — logs intent without writing a single byte |
 | **A/B slot support** | Independently flashes `recovery_a` and `recovery_b` |
-| **Non-A/B support** | Auto-detects legacy single-slot devices; no config needed |
+| **Hash-based change detection** | SHA-256 over first 4 MB — skips flash when partition already matches |
+| **Pre-flash backup** | Full `dd` dump of the current partition before any write |
+| **Backup integrity check** | Cross-verifies backup with SHA-256; aborts flash if check fails |
+| **Dry-run mode** | `ENABLED=check` — logs intent without writing a single byte |
 | **Backup rotation** | Keeps only the 1 most recent backup per slot |
 | **Log rotation** | Rotates `anchor.log` at 100 KB; preserves one `.old` copy |
 | **Zero-config defaults** | Sane defaults written on first install; no editing required |
-| **Timing metrics** | Flash duration (seconds) logged per slot |
+| **Timing metrics** | Flash duration logged per slot |
 
 ---
 
-## 🛠️ Compatibility & Prerequisites
+## ⚙️ Compatibility
 
-- Android device with **KernelSU**, **KernelSU Next**, or **Magisk** installed and active
-- Root access granted to the module service (granted automatically by the framework)
-- A `recovery.img` built for your exact device and Android version (e.g. TWRP, OrangeFox, LineageOS Recovery)
-- `zip` utility on your build host (only required for local builds)
+**Required:**
+- Android A/B (slot) device
+- **KernelSU**, **KernelSU Next**, or **Magisk** installed and active
+- A `recovery.img` built specifically for your device model and Android version (TWRP, OrangeFox, etc.)
 
-> **A/B devices:** It is strongly recommended to keep `FLASH_BOTH_SLOTS=true`. Android may boot from either slot after an OTA, and leaving one slot with stock recovery will cause it to reappear after the next slot switch.
+**Not supported:**
+- A-only (legacy single-partition) devices
 
-> **Non-A/B devices:** The `FLASH_BOTH_SLOTS` option is silently ignored. The module always targets the single `recovery` partition.
+> Not sure if your device is A/B? Run `getprop ro.boot.slot_suffix` in a root shell. If it returns `_a` or `_b` — you have an A/B device.
 
 ---
 
-## 📦 Installation
+## 📲 Installation
 
 ### Via KernelSU / Magisk Manager
 
@@ -149,11 +97,9 @@ The log file is capped at **100 KB**. On each run, if **`anchor.log`** exceeds t
 3. Navigate to **Modules → Install from storage**.
 4. Select `RecoveryAnchor.zip` and complete the installation.
 5. Push your recovery image to the device:
-
-```bash
-adb push recovery.img /data/adb/recovery-anchor/recovery.img
-```
-
+   ```bash
+   adb push recovery.img /data/adb/recovery-anchor/recovery.img
+   ```
 6. Reboot. The module activates on the first boot.
 
 ### Via Custom Recovery (TWRP / OrangeFox)
@@ -165,6 +111,38 @@ adb push recovery.img /data/adb/recovery-anchor/recovery.img
 
 ---
 
+## 🔄 Usage After OTA Update
+
+This is the most important section for day-to-day use.
+
+On A/B devices, an OTA update installs the new system image onto the **inactive slot** (e.g. if you're on `slot_a`, the OTA writes to `slot_b`). That new slot has a **clean, unpatched boot image** — meaning no root, no modules, and no RecoveryAnchor.
+
+If you reboot immediately after the OTA without patching the new slot, you will boot into an unrooted system. RecoveryAnchor will not run, and the stock recovery will remain permanently on that slot.
+
+### Correct procedure every time an OTA arrives:
+
+> **⚠️ Do NOT reboot when the system prompts you after an OTA. Follow these steps first.**
+
+1. OTA finishes downloading and applying.
+2. **Before rebooting** — open **Magisk** or **KernelSU**.
+3. Tap **"Install to Inactive Slot (After OTA)"** (Magisk) or the equivalent option in KernelSU.
+4. Wait for it to finish patching the boot image on the inactive slot.
+5. Now reboot.
+
+**What happens after the reboot:**
+
+- You boot into the updated slot with root preserved.
+- All modules are active, including RecoveryAnchor.
+- RecoveryAnchor detects that the recovery partition was replaced by the OTA.
+- It automatically reflashes your custom recovery image on both slots.
+- Done — no manual recovery reflash needed.
+
+### Why both slots?
+
+After an OTA, the recovery is replaced on both `recovery_a` and `recovery_b`. RecoveryAnchor with `FLASH_BOTH_SLOTS=true` (default) fixes both in one boot. This ensures that whichever slot Android switches to next, your custom recovery is already there.
+
+---
+
 ## ⚙️ Configuration
 
 The config file is created automatically on first install at:
@@ -173,7 +151,7 @@ The config file is created automatically on first install at:
 /data/adb/recovery-anchor/config
 ```
 
-Edit it with any root-capable text editor or via `adb shell`. The file uses plain `key=value` syntax sourced directly by the shell — no special parser, no JSON.
+Edit it with any root-capable text editor or via `adb shell`. The file uses plain `key=value` syntax — no special parser, no JSON.
 
 ### Parameters
 
@@ -188,8 +166,8 @@ Edit it with any root-capable text editor or via `adb shell`. The file uses plai
 | Value | Behaviour |
 |---|---|
 | `true` | Normal operation — flash when hashes differ |
-| `false` | Module is installed but completely inactive; exits immediately |
-| `check` | **Dry-run** — compares hashes and logs intent, but performs no `dd` writes |
+| `false` | Module installed but completely inactive; exits immediately |
+| `check` | **Dry-run** — compares hashes and logs intent, but performs no writes |
 
 #### Example config
 
@@ -197,7 +175,7 @@ Edit it with any root-capable text editor or via `adb shell`. The file uses plai
 # Absolute path to the recovery image to flash
 RECOVERY_IMG=/data/adb/recovery-anchor/recovery.img
 
-# true  = flash both recovery_a and recovery_b (recommended for A/B devices)
+# true  = flash both recovery_a and recovery_b (recommended)
 # false = flash only the currently active slot
 FLASH_BOTH_SLOTS=true
 
@@ -233,13 +211,9 @@ adb shell su -c "cat /data/adb/recovery-anchor/anchor.log"
 
 ### Log format
 
-Each line follows the pattern:
-
 ```
 [YYYY-MM-DD HH:MM:SS] [LEVEL] message
 ```
-
-**Log levels used:**
 
 | Level | Meaning |
 |---|---|
@@ -263,13 +237,88 @@ Each line follows the pattern:
 ```
 [ERROR] recovery_a — backup integrity check FAILED
 ```
-→ Indicates an I/O error reading the partition. The flash was aborted safely. Check the block device health and retry after reboot.
+→ I/O error reading the partition. Flash was aborted safely. Check block device health and retry after reboot.
 
 **Partition not found**
 ```
 [SKIP] recovery_a — partition not found
 ```
-→ The block device `/dev/block/by-name/recovery_a` does not exist. Verify the partition layout matches your device.
+→ `/dev/block/by-name/recovery_a` does not exist. Verify the partition layout matches your A/B device.
+
+**Module doesn't run after OTA reboot**
+→ You likely rebooted without patching the inactive slot first. Boot into your custom recovery, flash RecoveryAnchor again, then push the recovery image again. Next time follow the [Usage After OTA](#-usage-after-ota-update) steps before rebooting.
+
+---
+
+## 🔩 How It Works (Under the Hood)
+
+The core logic lives in **`service.sh`**, executed as root on every boot by the KernelSU / Magisk service framework.
+
+### 1. Boot gate
+
+Polls `sys.boot_completed`, then waits 15 seconds for block devices to fully initialise:
+
+```sh
+until [ "$(getprop sys.boot_completed)" = "1" ]; do
+    sleep 5
+done
+sleep 15
+```
+
+### 2. A/B slot detection
+
+Probes block device nodes directly — no reliance on build props:
+
+```sh
+if [ -b "/dev/block/by-name/recovery_a" ] || [ -b "/dev/block/by-name/recovery_b" ]; then
+    AB_DEVICE=true
+fi
+```
+
+### 3. Hash-based change detection
+
+SHA-256 over the first 4 MB of both the stored image and the live partition:
+
+```sh
+CHECK_BLOCKS=1024  # 1024 × 4096 B = 4 MB
+
+img_hash=$(dd if="$RECOVERY_IMG" bs=4096 count=$CHECK_BLOCKS 2>/dev/null | sha256sum | cut -d' ' -f1)
+part_hash=$(dd if="$part" bs=4096 count=$CHECK_BLOCKS 2>/dev/null | sha256sum | cut -d' ' -f1)
+```
+
+If hashes match — slot is skipped entirely. Zero writes, zero partition wear.
+
+### 4. Pre-flash backup with integrity verification
+
+Partition is backed up before any write. Backup is verified with a second SHA-256 pass. If hashes disagree, the corrupted backup is deleted and the flash is aborted:
+
+```sh
+dd if="$part" of="$backup_file" bs=4096 2>/dev/null
+sync
+
+src_sha=$(dd if="$part" bs=4096 2>/dev/null | sha256sum | cut -d' ' -f1)
+bak_sha=$(sha256sum "$backup_file" 2>/dev/null | cut -d' ' -f1)
+
+if [ "$src_sha" != "$bak_sha" ]; then
+    rm -f "$backup_file"
+    return 1  # Abort
+fi
+```
+
+Only the 1 most recent backup per slot is retained.
+
+### 5. Flash
+
+```sh
+t_start=$(date +%s)
+dd if="$RECOVERY_IMG" of="$part" bs=4096 2>/dev/null
+sync
+elapsed=$(( $(date +%s) - t_start ))
+```
+
+### 6. Log rotation
+
+Log is capped at 100 KB. When exceeded, rotated to `anchor.log.old` before new entries are appended.
 
 ---
 
@@ -283,16 +332,7 @@ cd Recovery-Anchor
 bash build.sh
 ```
 
-This produces **`RecoveryAnchor.zip`** in the project root — ready to flash immediately.
-
-The build script excludes `.git` metadata, itself, and any `.zip`, `.img`, or `.log` files from the archive:
-
-```bash
-zip -r RecoveryAnchor.zip \
-    module.prop service.sh customize.sh META-INF LICENSE \
-    --exclude "*.git*" --exclude "build.sh" \
-    --exclude "*.zip" --exclude "*.img" --exclude "*.log"
-```
+Produces **`RecoveryAnchor.zip`** in the project root — ready to flash immediately.
 
 ---
 
@@ -303,6 +343,7 @@ This module writes directly to raw block devices using `dd`. While every precaut
 - Always use a `recovery.img` built specifically for your device model and Android version.
 - Never flash an image from a different device.
 - Verify your setup safely first using **dry-run mode** (`ENABLED=check`).
+- Always follow the [Usage After OTA](#-usage-after-ota-update) procedure to keep root active on the new slot.
 
 > **The author and contributors are not responsible for any damage to your device, data loss, or voided warranty resulting from the use of this module. Use at your own risk.**
 
