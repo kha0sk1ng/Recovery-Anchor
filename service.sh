@@ -221,9 +221,11 @@ if [ "$AB_DEVICE" = "true" ]; then
         flash_slot "$active_slot"
     fi
 else
-    # Non-A/B (legacy single-slot) device: ignore FLASH_BOTH_SLOTS, use "recovery"
-    log INFO "Non-A/B device — flashing legacy recovery partition"
-    flash_slot ""
+    log ERROR "Non-A/B device detected — RecoveryAnchor supports A/B (slot) devices only."
+    log ERROR "No recovery partitions found at /dev/block/by-name/recovery_a or recovery_b."
+    log ERROR "Exiting without any changes."
+    log_raw ""
+    exit 1
 fi
 
 log INFO "Done."

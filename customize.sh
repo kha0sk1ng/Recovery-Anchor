@@ -44,6 +44,18 @@ else
     ui_print "  [*] Existing config kept."
 fi
 
+# ── A/B device check ─────────────────────────────────────────────────────────
+
+if [ -b "/dev/block/by-name/recovery_a" ] || [ -b "/dev/block/by-name/recovery_b" ]; then
+    ui_print "  [+] A/B device confirmed."
+else
+    ui_print ""
+    ui_print "  [!] WARNING: This does not appear to be an A/B device."
+    ui_print "      RecoveryAnchor is designed for A/B (slot) devices only."
+    ui_print "      The module will exit without doing anything on boot."
+    ui_print ""
+fi
+
 # ── Recovery image check ──────────────────────────────────────────────────────
 
 if [ -f "$DEFAULT_IMG" ]; then
