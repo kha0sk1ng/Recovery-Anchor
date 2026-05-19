@@ -6,7 +6,6 @@
 # KernelSU Next may not export MODDIR in all versions — explicit fallback.
 # MODID is set by the KSU installer from module.prop.
 MODDIR="${MODDIR:-/data/adb/modules_update/${MODID}}"
-MODDIR="${MODDIR:-/data/adb/modules_update/recovery-anchor}"
 
 ANCHOR_DIR="/data/adb/recovery-anchor"
 CONFIG="$ANCHOR_DIR/config"
@@ -38,6 +37,9 @@ FLASH_BOTH_SLOTS=true
 
 # Set to false to pause flashing without uninstalling the module
 ENABLED=true
+
+# true = verify partition matches image after each flash (recommended)
+VERIFY_AFTER_FLASH=true
 CONF
     ui_print "  [+] Config created."
 else
@@ -46,8 +48,9 @@ fi
 
 # ── A/B device check ─────────────────────────────────────────────────────────
 
-if [ -b "/dev/block/by-name/recovery_a" ] || [ -b "/dev/block/by-name/recovery_b" ]; then
-    ui_print "  [+] A/B device confirmed."
+slot_suffix="$(getprop ro.boot.slot_suffix 2>/dev/null)"
+if [ -n "$slot_suffix" ]; then
+    ui_print "  [+] A/B device confirmed (slot: ${slot_suffix})."
 else
     ui_print ""
     ui_print "  [!] WARNING: This does not appear to be an A/B device."
