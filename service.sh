@@ -118,10 +118,12 @@ if [ ! -f "$RECOVERY_IMG" ]; then
     exit 1
 fi
 
-# Log image size
+# Log image size and sha256
 img_bytes=$(wc -c < "$RECOVERY_IMG" 2>/dev/null | tr -d ' ')
 img_mb=$(( ${img_bytes:-0} / 1048576 ))
+img_sha=$(sha256sum "$RECOVERY_IMG" 2>/dev/null | cut -d' ' -f1)
 log INFO "Image   : $RECOVERY_IMG (${img_mb} MB)"
+log INFO "SHA256  : ${img_sha}"
 
 # ── Flash mode ────────────────────────────────────────────────────────────────
 
