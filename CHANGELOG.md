@@ -16,6 +16,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 
 - **Post-flash verification (`VERIFY_AFTER_FLASH`)** — New config option (default `true`). After each successful `dd`, the first 4 MB of the partition is re-read and compared against the source image. Flash is reported as failed if hashes differ.
+- **Configurable boot delay (`BOOT_DELAY`)** — Replaces the hardcoded `sleep 15` after `sys.boot_completed`. Default: `15`.
+- **Configurable backup retention (`MAX_BACKUPS`)** — Max backup files to keep per slot. Default: `1`.
+- **Configurable hash check size (`HASH_CHECK_BLOCKS`)** — Number of 4 KB blocks compared for change detection. Default: `1024` (= 4 MB).
 
 ### Fixed
 
