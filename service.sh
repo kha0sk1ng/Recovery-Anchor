@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# RecoveryAnchor v1.3.0
+# RecoveryAnchor v1.3.1
 # https://github.com/kha0sk1ng/Recovery-Anchor/
 # Runs as root on every boot via KernelSU.
 
