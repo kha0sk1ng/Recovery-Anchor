@@ -8,7 +8,7 @@ CONFIG="$ANCHOR_DIR/config"
 LOG="$ANCHOR_DIR/anchor.log"
 MAX_LOG_BYTES=102400  # 100 KB
 
-VERSION="v1.3.0"
+VERSION="v1.3.1"
 REPO="https://github.com/kha0sk1ng/Recovery-Anchor/"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -38,6 +38,9 @@ RECOVERY_IMG="$ANCHOR_DIR/recovery.img"
 FLASH_BOTH_SLOTS="true"
 ENABLED="true"
 VERIFY_AFTER_FLASH="true"
+BOOT_DELAY="15"
+MAX_BACKUPS="1"
+HASH_CHECK_BLOCKS="1024"
 
 if [ -f "$CONFIG" ]; then
     cfg_val=$(grep -E '^[[:space:]]*RECOVERY_IMG=' "$CONFIG" | tail -1 | cut -d= -f2-)
@@ -51,6 +54,15 @@ if [ -f "$CONFIG" ]; then
 
     cfg_val=$(grep -E '^[[:space:]]*VERIFY_AFTER_FLASH=' "$CONFIG" | tail -1 | cut -d= -f2-)
     [ -n "$cfg_val" ] && VERIFY_AFTER_FLASH="$cfg_val"
+
+    cfg_val=$(grep -E '^[[:space:]]*BOOT_DELAY=' "$CONFIG" | tail -1 | cut -d= -f2-)
+    [ -n "$cfg_val" ] && BOOT_DELAY="$cfg_val"
+
+    cfg_val=$(grep -E '^[[:space:]]*MAX_BACKUPS=' "$CONFIG" | tail -1 | cut -d= -f2-)
+    [ -n "$cfg_val" ] && MAX_BACKUPS="$cfg_val"
+
+    cfg_val=$(grep -E '^[[:space:]]*HASH_CHECK_BLOCKS=' "$CONFIG" | tail -1 | cut -d= -f2-)
+    [ -n "$cfg_val" ] && HASH_CHECK_BLOCKS="$cfg_val"
 fi
 
 # ── Cleanup trap ─────────────────────────────────────────────────────────────
@@ -85,7 +97,7 @@ log INFO "Waiting for sys.boot_completed..."
 until [ "$(getprop sys.boot_completed)" = "1" ]; do
     sleep 5
 done
-sleep 15
+sleep "$BOOT_DELAY"
 
 # ── Device info ───────────────────────────────────────────────────────────────
 
@@ -123,7 +135,8 @@ fi
 # Compares first 4 MB of image vs partition (fast + reliable).
 # Stock and custom recovery always differ in the first pages (header, ramdisk).
 
-CHECK_BLOCKS=1024  # 1024 × 4096 B = 4 MB
+# CHECK_BLOCKS is set from config (HASH_CHECK_BLOCKS, default 1024 = 4 MB)
+CHECK_BLOCKS="$HASH_CHECK_BLOCKS"
 
 flash_slot() {
     local slot="$1"
@@ -187,7 +200,7 @@ flash_slot() {
 
     # Keep only the 1 most recent backup per slot; delete older ones
     local old_backups
-    old_backups=$(ls -t "$ANCHOR_DIR/recovery_backup_${slot_label}_"*.img 2>/dev/null | tail -n +2)
+    old_backups=$(ls -t "$ANCHOR_DIR/recovery_backup_${slot_label}_"*.img 2>/dev/null | tail -n +$(( MAX_BACKUPS + 1 )))
     if [ -n "$old_backups" ]; then
         printf '%s\n' "$old_backups" | while IFS= read -r f; do
             log BACKUP "recovery${slot} — removing old backup: $f"

@@ -1,5 +1,5 @@
 #!/sbin/sh
-# RecoveryAnchor v1.3.0 — customize.sh
+# RecoveryAnchor v1.3.1 — customize.sh
 # https://github.com/kha0sk1ng/Recovery-Anchor/
 # Runs during installation via KernelSU Manager.
 
@@ -13,7 +13,7 @@ DEFAULT_IMG="$ANCHOR_DIR/recovery.img"
 
 ui_print ""
 ui_print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-ui_print "  RecoveryAnchor v1.3.0"
+ui_print "  RecoveryAnchor v1.3.1"
 ui_print "  by kha0sk1ng"
 ui_print "  github.com/kha0sk1ng/Recovery-Anchor"
 ui_print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -40,6 +40,15 @@ ENABLED=true
 
 # true = verify partition matches image after each flash (recommended)
 VERIFY_AFTER_FLASH=true
+
+# Seconds to wait after sys.boot_completed before flashing (default: 15)
+BOOT_DELAY=15
+
+# Max backup files to keep per slot (default: 1)
+MAX_BACKUPS=1
+
+# Blocks to hash for change detection (1 block = 4 KB; default 1024 = 4 MB)
+HASH_CHECK_BLOCKS=1024
 CONF
     ui_print "  [+] Config created."
 else
