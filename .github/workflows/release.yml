@@ -51,7 +51,7 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           # Extract the block between ## [VERSION] and the next ## [
-          BODY=$(awk "/^## \[${VERSION}\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md)
+          BODY=$(awk "/^## \\[${VERSION}\]/{found=1; next} found && /^## \\[/{exit} found{print}" CHANGELOG.md)
           if [ -z "$BODY" ]; then
             BODY="See [CHANGELOG.md](CHANGELOG.md) for details."
           fi
@@ -72,7 +72,7 @@ jobs:
 
           | File | Size | SHA-256 |
           |---|---|---|
-          | \`${OUTPUT}\` | ${SIZE} | \`${SHA256}\` |
+          | \`${OUTPUT}\` | ${SIZE} | \`${SHA}\` |
 
           **Verify before flashing:**
           \`\`\`bash
