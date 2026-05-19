@@ -6,6 +6,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v1.3.1] - 2026-05-19
+
+### Changed
+
+- **A/B detection in installer** — `customize.sh` now uses `getprop ro.boot.slot_suffix` instead of probing block devices, which are not guaranteed to be available during installation.
+- **Backup: single partition read** — `service.sh` now reads the recovery partition once via `tee` to write the backup and compute SHA-256 simultaneously, eliminating the redundant second `dd` pass.
+
+### Added
+
+- **Post-flash verification (`VERIFY_AFTER_FLASH`)** — New config option (default `true`). After each successful `dd`, the first 4 MB of the partition is re-read and compared against the source image. Flash is reported as failed if hashes differ.
+
+### Fixed
+
+- **Duplicate MODDIR fallback** — Removed the redundant second `MODDIR` assignment in `customize.sh` that could never trigger.
+- **Trailing blank line in log** — Replaced repeated `log_raw ""` calls before every `exit` with a single `trap _on_exit EXIT` handler.
+
+---
+
 ## [v1.3.0] - 2026-05-19
 
 ### Changed
