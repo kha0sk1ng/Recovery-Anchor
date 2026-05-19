@@ -58,6 +58,12 @@ jobs:
           # Write to a file to avoid shell escaping issues with multiline
           printf '%s' "$BODY" > release_body.md
 
+      - name: Debug build outputs
+        run: |
+          echo "::notice title=Debug::OUTPUT=${{ steps.build.outputs.OUTPUT }}"
+          echo "::notice title=Debug::SIZE=${{ steps.build.outputs.SIZE }}"
+          echo "::notice title=Debug::SHA256=${{ steps.build.outputs.SHA256 }}"
+
       - name: Append artifact info to release body
         run: |
           printf '\n---\n\n### 📦 Artifact\n\n| File | Size | SHA-256 |\n|---|---|---|\n| `%s` | %s | `%s` |\n\n**Verify before flashing:**\n```bash\nsha256sum %s\n```\n\n---\n\n**Install:** Flash via KernelSU / Magisk → Modules → Install from storage.\nRead [Usage After OTA](https://github.com/${{ github.repository }}#-usage-after-ota-update) before rebooting after any system update.\n' \
