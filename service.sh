@@ -42,6 +42,14 @@ BOOT_DELAY="15"
 MAX_BACKUPS="1"
 HASH_CHECK_BLOCKS="1024"
 
+is_positive_int() {
+    case "$1" in
+        ''|*[!0-9]*) return 1 ;;
+        0) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
 if [ -f "$CONFIG" ]; then
     cfg_val=$(grep -E '^[[:space:]]*RECOVERY_IMG=' "$CONFIG" | tail -1 | cut -d= -f2-)
     [ -n "$cfg_val" ] && RECOVERY_IMG="$cfg_val"
@@ -63,6 +71,21 @@ if [ -f "$CONFIG" ]; then
 
     cfg_val=$(grep -E '^[[:space:]]*HASH_CHECK_BLOCKS=' "$CONFIG" | tail -1 | cut -d= -f2-)
     [ -n "$cfg_val" ] && HASH_CHECK_BLOCKS="$cfg_val"
+fi
+
+if ! is_positive_int "$BOOT_DELAY"; then
+    log ERROR "Invalid BOOT_DELAY='$BOOT_DELAY' in config — falling back to 15"
+    BOOT_DELAY="15"
+fi
+
+if ! is_positive_int "$MAX_BACKUPS"; then
+    log ERROR "Invalid MAX_BACKUPS='$MAX_BACKUPS' in config — falling back to 1"
+    MAX_BACKUPS="1"
+fi
+
+if ! is_positive_int "$HASH_CHECK_BLOCKS"; then
+    log ERROR "Invalid HASH_CHECK_BLOCKS='$HASH_CHECK_BLOCKS' in config — falling back to 1024"
+    HASH_CHECK_BLOCKS="1024"
 fi
 
 # ── Cleanup trap ─────────────────────────────────────────────────────────────
@@ -242,7 +265,7 @@ flash_slot() {
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 # Detect whether this is an A/B device by checking for slot-suffixed partitions.
-# Fall back to the legacy "recovery" partition on non-A/B (single-slot) devices.
+# Non-A/B devices are not supported and exit without flashing.
 
 AB_DEVICE=false
 if [ -b "/dev/block/by-name/recovery_a" ] || [ -b "/dev/block/by-name/recovery_b" ]; then

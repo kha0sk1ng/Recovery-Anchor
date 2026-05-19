@@ -5,7 +5,8 @@
 
 set -e
 
-OUTPUT="RecoveryAnchor.zip"
+VERSION=$(grep '^version=' module.prop | cut -d= -f2)
+OUTPUT="RecoveryAnchor-${VERSION}.zip"
 SCRIPT_NAME="$(basename "$0")"
 
 # Remove any previous build artifact
@@ -26,4 +27,4 @@ zip -r "$OUTPUT" \
     --exclude "*.img" \
     --exclude "*.log"
 
-echo "[+] Done: $OUTPUT ($(du -sh "$OUTPUT" | cut -f1))"
+echo "[+] Done: $OUTPUT ($(ls -lh "$OUTPUT" | awk '{print $5}'))"

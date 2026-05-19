@@ -9,7 +9,7 @@
 [![KernelSU Next](https://img.shields.io/badge/KernelSU_Next-supported-brightgreen?logo=linux)](https://github.com/rifsxd/KernelSU-Next)
 [![Magisk](https://img.shields.io/badge/Magisk-supported-orange)](https://github.com/topjohnwu/Magisk)
 [![Shell](https://img.shields.io/badge/Shell-Bash-4EAA25?logo=gnubash&logoColor=white)](service.sh)
-[![Version](https://img.shields.io/badge/version-v1.2.4-blueviolet)](module.prop)
+[![Release](https://img.shields.io/github/v/release/kha0sk1ng/Recovery-Anchor?display_name=tag&color=blueviolet)](https://github.com/kha0sk1ng/Recovery-Anchor/releases)
 
 </div>
 
@@ -45,7 +45,7 @@ Every Android OTA update rewrites the inactive boot slot — and with it, your c
 
 ## ⚡ Quick Start
 
-1. Download `RecoveryAnchor.zip` from [Releases](https://github.com/kha0sk1ng/Recovery-Anchor/releases).
+1. Download the latest `RecoveryAnchor-<version>.zip` from [Releases](https://github.com/kha0sk1ng/Recovery-Anchor/releases).
 2. Install via **KernelSU / Magisk → Modules → Install from storage**.
 3. Push your recovery image:
    ```bash
@@ -67,8 +67,10 @@ Every Android OTA update rewrites the inactive boot slot — and with it, your c
 | **Pre-flash backup** | Full `dd` dump of the current partition before any write |
 | **Backup integrity check** | Cross-verifies backup with SHA-256; aborts flash if check fails |
 | **Dry-run mode** | `ENABLED=check` — logs intent without writing a single byte |
-| **Backup rotation** | Keeps only the 1 most recent backup per slot |
+| **Backup rotation** | Keeps only the newest N backups per slot (`MAX_BACKUPS`, default: 1) |
 | **Log rotation** | Rotates `anchor.log` at 100 KB; preserves one `.old` copy |
+| **Post-flash verification** | Optional `VERIFY_AFTER_FLASH=true` re-check after every write |
+| **Configurable timing & hash window** | `BOOT_DELAY` and `HASH_CHECK_BLOCKS` tune boot wait and compare size |
 | **Zero-config defaults** | Sane defaults written on first install; no editing required |
 | **Timing metrics** | Flash duration logged per slot |
 
@@ -92,10 +94,10 @@ Every Android OTA update rewrites the inactive boot slot — and with it, your c
 
 ### Via KernelSU / Magisk Manager
 
-1. Download **`RecoveryAnchor.zip`** from the [Releases](https://github.com/kha0sk1ng/Recovery-Anchor/releases) page.
+1. Download the latest **`RecoveryAnchor-<version>.zip`** from the [Releases](https://github.com/kha0sk1ng/Recovery-Anchor/releases) page.
 2. Open **KernelSU Manager** or **Magisk**.
 3. Navigate to **Modules → Install from storage**.
-4. Select `RecoveryAnchor.zip` and complete the installation.
+4. Select the downloaded `RecoveryAnchor-<version>.zip` and complete the installation.
 5. Push your recovery image to the device:
    ```bash
    adb push recovery.img /data/adb/recovery-anchor/recovery.img
@@ -104,7 +106,7 @@ Every Android OTA update rewrites the inactive boot slot — and with it, your c
 
 ### Via Custom Recovery (TWRP / OrangeFox)
 
-1. Download **`RecoveryAnchor.zip`**.
+1. Download the latest **`RecoveryAnchor-<version>.zip`**.
 2. Boot into your custom recovery.
 3. Go to **Install → select the zip → Swipe to install**.
 4. Push your recovery image as shown above, then reboot normally.
@@ -151,7 +153,7 @@ The config file is created automatically on first install at:
 /data/adb/recovery-anchor/config
 ```
 
-Edit it with any root-capable text editor or via `adb shell`. The file uses plain `key=value` syntax — no special parser, no JSON.
+Edit it with any root-capable text editor or via `adb shell`. The file uses plain `key=value` syntax and is parsed safely line-by-line — no shell `source`, no JSON.
 
 ### Parameters
 
@@ -160,6 +162,10 @@ Edit it with any root-capable text editor or via `adb shell`. The file uses plai
 | `RECOVERY_IMG` | `/data/adb/recovery-anchor/recovery.img` | Absolute path to the recovery image |
 | `FLASH_BOTH_SLOTS` | `true` | Flash both A/B slots (`true`) or active slot only (`false`) |
 | `ENABLED` | `true` | Master switch: `true`, `false`, or `check` (dry-run) |
+| `VERIFY_AFTER_FLASH` | `true` | Verify partition hash after each flash |
+| `BOOT_DELAY` | `15` | Seconds to wait after `sys.boot_completed` |
+| `MAX_BACKUPS` | `1` | Max backup images to keep per slot |
+| `HASH_CHECK_BLOCKS` | `1024` | Number of 4 KB blocks hashed for compare/verify (1024 = 4 MB) |
 
 #### `ENABLED` modes
 
@@ -183,6 +189,18 @@ FLASH_BOTH_SLOTS=true
 # check = dry-run: log what would happen, skip actual writes
 # false = disabled, exit immediately
 ENABLED=true
+
+# Verify partition matches image after each flash
+VERIFY_AFTER_FLASH=true
+
+# Seconds to wait after boot completion
+BOOT_DELAY=15
+
+# Keep only the newest backup per slot
+MAX_BACKUPS=1
+
+# Compare first 1024 * 4 KB = 4 MB
+HASH_CHECK_BLOCKS=1024
 ```
 
 To apply changes, simply **reboot** — the config is sourced fresh on every run.
@@ -217,7 +235,7 @@ adb shell su -c "cat /data/adb/recovery-anchor/anchor.log"
 
 | Level | Meaning |
 |---|---|
-| `INFO` | General status (device info, mode, image size) |
+| `INFO` | General status (device info, mode, image size, verify start) |
 | `OK` | Slot already matches — no flash performed |
 | `FLASH` | Hash mismatch detected; flash initiated |
 | `BACKUP` | Backup operation status |
@@ -256,13 +274,13 @@ The core logic lives in **`service.sh`**, executed as root on every boot by the 
 
 ### 1. Boot gate
 
-Polls `sys.boot_completed`, then waits 15 seconds for block devices to fully initialise:
+Polls `sys.boot_completed`, then waits `BOOT_DELAY` seconds for block devices to fully initialise:
 
 ```sh
 until [ "$(getprop sys.boot_completed)" = "1" ]; do
     sleep 5
 done
-sleep 15
+sleep "$BOOT_DELAY"
 ```
 
 ### 2. A/B slot detection
@@ -277,10 +295,10 @@ fi
 
 ### 3. Hash-based change detection
 
-SHA-256 over the first 4 MB of both the stored image and the live partition:
+SHA-256 over the first `HASH_CHECK_BLOCKS` × 4 KB of both the stored image and the live partition:
 
 ```sh
-CHECK_BLOCKS=1024  # 1024 × 4096 B = 4 MB
+CHECK_BLOCKS="$HASH_CHECK_BLOCKS"  # default: 1024 × 4096 B = 4 MB
 
 img_hash=$(dd if="$RECOVERY_IMG" bs=4096 count=$CHECK_BLOCKS 2>/dev/null | sha256sum | cut -d' ' -f1)
 part_hash=$(dd if="$part" bs=4096 count=$CHECK_BLOCKS 2>/dev/null | sha256sum | cut -d' ' -f1)
@@ -290,13 +308,11 @@ If hashes match — slot is skipped entirely. Zero writes, zero partition wear.
 
 ### 4. Pre-flash backup with integrity verification
 
-Partition is backed up before any write. Backup is verified with a second SHA-256 pass. If hashes disagree, the corrupted backup is deleted and the flash is aborted:
+Partition is backed up before any write. The partition is read once, piped through `tee` into the backup file, and hashed on the fly. Then the saved backup file is hashed again to confirm integrity. If hashes disagree, the corrupted backup is deleted and the flash is aborted:
 
 ```sh
-dd if="$part" of="$backup_file" bs=4096 2>/dev/null
-sync
-
-src_sha=$(dd if="$part" bs=4096 2>/dev/null | sha256sum | cut -d' ' -f1)
+src_sha=$(dd if="$part" bs=4096 2>/dev/null | tee "$backup_file" | sha256sum | cut -d' ' -f1)
+chmod 600 "$backup_file"
 bak_sha=$(sha256sum "$backup_file" 2>/dev/null | cut -d' ' -f1)
 
 if [ "$src_sha" != "$bak_sha" ]; then
@@ -311,8 +327,7 @@ Only the 1 most recent backup per slot is retained.
 
 ```sh
 t_start=$(date +%s)
-dd if="$RECOVERY_IMG" of="$part" bs=4096 2>/dev/null
-sync
+dd if="$RECOVERY_IMG" of="$part" bs=4096 conv=fsync 2>/dev/null
 elapsed=$(( $(date +%s) - t_start ))
 ```
 
@@ -332,7 +347,7 @@ cd Recovery-Anchor
 bash build.sh
 ```
 
-Produces **`RecoveryAnchor.zip`** in the project root — ready to flash immediately.
+Produces **`RecoveryAnchor-<version>.zip`** in the project root — ready to flash immediately.
 
 ---
 
