@@ -39,7 +39,7 @@ jobs:
             --exclude "*.zip" \
             --exclude "*.img" \
             --exclude "*.log"
-          SIZE=$(du -sh "$OUTPUT" | cut -f1)
+          SIZE=$(ls -lh "$OUTPUT" | awk '{print $5}')
           SHA256=$(sha256sum "$OUTPUT" | cut -d' ' -f1)
           echo "OUTPUT=$OUTPUT"         >> "$GITHUB_OUTPUT"
           echo "SIZE=$SIZE"             >> "$GITHUB_OUTPUT"
