@@ -60,30 +60,11 @@ jobs:
 
       - name: Append artifact info to release body
         run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          SHA="${{ steps.build.outputs.SHA256 }}"
-          SIZE="${{ steps.build.outputs.SIZE }}"
-          OUTPUT="${{ steps.build.outputs.OUTPUT }}"
-          cat >> release_body.md << EOF
-
-          ---
-
-          ### 📦 Artifact
-
-          | File | Size | SHA-256 |
-          |---|---|---|
-          | \`${OUTPUT}\` | ${SIZE} | \`${SHA}\` |
-
-          **Verify before flashing:**
-          \`\`\`bash
-          sha256sum RecoveryAnchor-${VERSION}.zip
-          \`\`\`
-
-          ---
-
-          **Install:** Flash via KernelSU / Magisk → Modules → Install from storage.
-          Read [Usage After OTA](https://github.com/${{ github.repository }}#-usage-after-ota-update) before rebooting after any system update.
-          EOF
+          printf '\n---\n\n### 📦 Artifact\n\n| File | Size | SHA-256 |\n|---|---|---|\n| `%s` | %s | `%s` |\n\n**Verify before flashing:**\n```bash\nsha256sum %s\n```\n\n---\n\n**Install:** Flash via KernelSU / Magisk → Modules → Install from storage.\nRead [Usage After OTA](https://github.com/${{ github.repository }}#-usage-after-ota-update) before rebooting after any system update.\n' \
+            "${{ steps.build.outputs.OUTPUT }}" \
+            "${{ steps.build.outputs.SIZE }}" \
+            "${{ steps.build.outputs.SHA256 }}" \
+            "${{ steps.build.outputs.OUTPUT }}" >> release_body.md
 
       - name: Create GitHub Release (draft)
         uses: softprops/action-gh-release@v2
